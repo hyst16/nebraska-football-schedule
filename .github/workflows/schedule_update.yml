@@ -41,6 +41,6 @@ jobs:
       # Push changes using the personal access token (PAT)
       - name: Push changes
         env:
-          GITHUB_TOKEN: ${{ secrets.DEPLOY_TOKEN }}  # Make sure you create this secret in your repo
+          GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}  # Make sure you create this secret in your repo
         run: |
-          git push https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/${{ github.repository }}.git
+          git push https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git
