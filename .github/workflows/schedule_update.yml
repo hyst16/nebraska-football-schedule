@@ -41,6 +41,6 @@ jobs:
       # Push changes using the personal access token (PAT)
       - name: Push changes
         env:
-          GITHUB_TOKEN: ${{ secrets.ACTION_PAT }}  # Updated to use ACTION_PAT
+          GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}  # Updated to use ACTION_PAT
         run: |
-          git push https://x-access-token:${{ secrets.ACTION_PAT }}@github.com/${{ github.repository }}.git
+          git push https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git
