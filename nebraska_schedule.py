@@ -4,6 +4,31 @@ import re
 from datetime import datetime
 import pytz
 
+# Function to scrape NCAA football rankings from the official site
+def scrape_ncaa_rankings():
+    url = "https://www.ncaa.com/rankings/football/fbs/associated-press"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    table = soup.find('table')
+    rankings = {}
+
+    if table:
+        rows = table.find_all('tr')
+
+        # Loop through rows, skipping the first (header row)
+        for row in rows[1:26]:  # Only get top 25 teams
+            cells = row.find_all('td')
+            rank = cells[0].text.strip()
+            team_name = re.sub(r'\s\(\d+\)', '', cells[1].text.strip())
+
+            # Handle special cases for teams like USC
+            if "Southern Cal" in team_name or "Southern California" in team_name:
+                team_name = "USC"
+
+            rankings[team_name] = f"#{rank}"
+    
+    return rankings
+
 # Function to fetch football schedule across multiple pages
 def fetch_schedule():
     all_data = []
@@ -13,6 +38,7 @@ def fetch_schedule():
         response = requests.get(url)
         data = response.json()['data']
 
+        # If no data is returned, break the loop
         if not data:
             break
         
@@ -28,23 +54,26 @@ def filter_2024_schedule(all_data):
 
 # Helper function to format the date as "Aug 31 (Sat)"
 def format_date(date_str, opponent_name=None):
+    # Hardcoded dates for Illinois and Iowa games
     if opponent_name == "Illinois":
         return "Sep 20 (Fri)"
     elif opponent_name == "Iowa":
         return "Nov 29 (Fri)"
     
+    # Normal date formatting for other games
     date_obj = datetime.strptime(date_str.split('T')[0], "%Y-%m-%d")
     return date_obj.strftime("%b %d (%a)")
 
-# Helper function to convert UTC to CST and format the game time without leading zeros
+# Helper function to convert UTC to CST and format the game time
 def format_time_to_cst(utc_time_str):
     cst = pytz.timezone('America/Chicago')
     utc_time = datetime.strptime(utc_time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
     cst_time = utc_time.replace(tzinfo=pytz.utc).astimezone(cst)
-    return cst_time.strftime("%I:%M %p CST").lstrip('0')  # Remove leading zero
+    return cst_time.strftime("%I:%M %p CST")
 
 # Helper function to handle result and score display
 def format_result(event):
+    # Check if game time is marked as "TBA"
     if 'tba' in event and event['tba'] == "time_tba":
         return "TBA"
     
@@ -62,125 +91,293 @@ def format_result(event):
             else:
                 return f"L {losing_score}-{winning_score}"
         else:
-            return "TBA"
+            return "TBA"  # If scores are None, return "TBA"
     else:
+        # If no result, check if there's a datetime for an unplayed game
         if event['datetime']:
             return format_time_to_cst(event['datetime'])
         else:
-            return "TBD"
+            return "TBD"  # If no datetime is available
 
-# Function to get football rankings from NCAA website
-def get_football_rankings():
-    url = "https://www.ncaa.com/rankings/football/fbs/associated-press"
+# Function to display rankings correctly
+def format_ranking(ranking, team_name, ncaa_rankings):
+    if ranking and ranking.isdigit():
+        return f"#{ranking}"
+    elif team_name in ncaa_rankings:
+        return ncaa_rankings[team_name]  # Return scraped ranking from NCAA site
+    return ""  # Leave blank if no ranking available
+
+# Helper function to get the next upcoming game based on today's date
+def get_upcoming_game(schedule_data):
+    today = datetime.now(pytz.timezone('America/Chicago')).date()  # Use date only for comparison
+    
+    # Find the next game on or after today's date
+    for event in schedule_data:
+        event_date = datetime.strptime(event['datetime'].split('T')[0], "%Y-%m-%d").date()  # Extract date only
+        if event_date >= today:
+            return event
+    
+    # If no future game is found, default to the first game (though this shouldn't happen)
+    return schedule_data[0]
+
+# Helper function to get Nebraska odds and betting information
+def get_nebraska_odds(upcoming_game_date):
+    # Send a request to the Fox Sports page
+    url = 'https://www.foxsports.com/college-football/nebraska-cornhuskers-team-odds'
     response = requests.get(url)
     soup = BeautifulSoup(response.content, 'html.parser')
-    table = soup.find('table')
-    rankings = {}
-    rows = table.find_all('tr')
 
-    for row in rows[1:26]:
-        cells = row.find_all('td')
-        rank = cells[0].text.strip()
-        team_name = re.sub(r'\s\(\d+\)', '', cells[1].text.strip())
+    event_container = soup.find('div', class_='event-container desktop-cards')
+    if event_container:
+        odds_containers = event_container.find_all('li', class_='entity-odds-container')
 
-        # Normalize USC variations
-        if team_name in ["Southern California", "Southern Cal"]:
-            team_name = "USC"
+        for odds_container in odds_containers:
+            # Extract the game date from the odds container
+            game_date = odds_container.find('div', class_='odds-component-date')
+            if game_date:
+                game_date_text = game_date.text.strip()  # e.g., "Sat, Oct 5 at 8:00 PM"
+                
+                # Extract only "Oct 5" from "Sat, Oct 5 at 8:00 PM"
+                odds_month_day = re.search(r'[A-Za-z]+ \d+', game_date_text).group()  # "Oct 5"
+                odds_month, odds_day = odds_month_day.split()  # Split into "Oct" and "5"
+                odds_day = odds_day.lstrip('0')  # Remove leading zero from day
+                odds_month_day = odds_month.lower() + odds_day  # Recombine, e.g., "oct5"
+                print(f"Odds Month Day (Normalized): {odds_month_day}")  # Debugging print
 
-        rankings[team_name] = f"#{rank}"
+                # Extract only "Oct 05" from "Oct 05 (Sat)" and normalize it for comparison
+                upcoming_month_day = re.search(r'[A-Za-z]+ \d+', upcoming_game_date).group()  # "Oct 05"
+                upcoming_month, upcoming_day = upcoming_month_day.split()  # Split into "Oct" and "05"
+                upcoming_day = upcoming_day.lstrip('0')  # Remove leading zero from day
+                upcoming_month_day = upcoming_month.lower() + upcoming_day  # Recombine, e.g., "oct5"
+                print(f"Upcoming Month Day (Normalized): {upcoming_month_day}")  # Debugging print
 
-    return rankings
+                # Compare the normalized month-day strings
+                if odds_month_day == upcoming_month_day:
+                    # Extract and return spread and bet description if dates match
+                    team_names = odds_container.find_all('div', class_='uc fs-30')
+                    spreads = odds_container.find_all('span', class_='ff-ff fs-20 cl-blk')
+                    
+                    nebraska_spread = ""
+                    bet_description = ""
+                    
+                    if len(team_names) == 2 and len(spreads) == 2:
+                        team1_name = team_names[0].text.strip()
+                        team2_name = team_names[1].text.strip()
+                        team1_spread = spreads[0].text.strip()
+                        team2_spread = spreads[1].text.strip()
+
+                        # Determine if 'NEB' is team1 or team2
+                        if 'NEB' in team1_name:
+                            nebraska_spread = team1_spread
+                        else:
+                            nebraska_spread = team2_spread
+
+                    # Extract bet description
+                    bet_description_container = odds_container.find('div', class_='bet-description')
+                    if bet_description_container:
+                        bet_description = bet_description_container.text.strip()
+
+                    return nebraska_spread, bet_description
+
+    return None, None
+
+
 
 # Generate HTML schedule from filtered data
-def generate_html(schedule_data, rankings):
-    html_content = '''
+def generate_html(schedule_data, ncaa_rankings):
+    upcoming_game = get_upcoming_game(schedule_data)  # Get the next game based on today's date
+
+    # Extract upcoming game info
+    upcoming_opponent = upcoming_game['opponent_name']
+    upcoming_opponent_logo_url = upcoming_game['opponent']['official_logo']['url']
+    upcoming_location = upcoming_game['location']
+    upcoming_time = format_time_to_cst(upcoming_game['datetime'])
+    upcoming_date = format_date(upcoming_game['datetime'], opponent_name=upcoming_opponent)
+    upcoming_tv_logo_url = ""
+    
+    if upcoming_game['schedule_event_links']:
+        for link in upcoming_game['schedule_event_links']:
+            if link['icon'] and 'url' in link['icon']:
+                upcoming_tv_logo_url = link['icon']['url']
+                break
+
+    # Get Nebraska odds and betting information
+    nebraska_spread, bet_description = get_nebraska_odds(upcoming_date)
+
+    # Generate the HTML content
+    html_content = f'''
     <html>
     <head>
         <title>Nebraska Football Schedule 2024</title>
         <style>
-            body {
-                font-family: Arial, sans-serif;
-            }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 20px;
-            }
-            table, th, td {
-                border: 1px solid black;
-            }
-            th, td {
-                padding: 10px;
+            @font-face {{
+                font-family: "Liberator";
+                src: url("Liberator.ttf") format("truetype");
+            }}
+            body {{
+                font-family: "Liberator", Arial, sans-serif;
+                background: url('Memorial Stadium Picture.jpg') no-repeat center center fixed;
+                background-size: cover;
+                padding: 20px;
+                color: white;
+                font-size: 24px;
+                display: flex;
+                justify-content: space-between;
+            }}
+            .left-section {{
+                width: 33%;
+                text-align: middle;
+                padding: 20px;
+            }}
+            .left-section img {{
+                width: 50%;
+                margin-bottom: 15px;
+            }}
+            .upcoming-game {{
+                background-color: rgba(0, 0, 0, 0.8); /* Black background */
+                padding: 20px;
+                border-radius: 10px;
+            }}
+            .upcoming-game h2 {{
+                font-size: 28px;
+                margin-bottom: 10px;
+            }}
+            .upcoming-game h1 {{
+                font-size: 36px; /* Increase the size of the opponent name */
+                margin-bottom: 5px;
+                display: inline-block;
+                vertical-align: middle;
+            }}
+            .upcoming-game img {{
+                width: 100px;
+                vertical-align: middle;
+                margin-right: 10px;
+            }}
+            .game-info {{
+                font-size: 18px;
                 text-align: left;
-            }
-            .logo {
-                height: 50px;
-            }
-            .tv-logo {
-                height: 30px;
-            }
+            }}
+            .game-info td {{
+                padding: 1px; /* Tighten the padding */
+                border: none; /* Remove grid lines */
+                text-align: left; /* Left justify the text */
+            }}
+            .right-section {{
+                width: 66%;
+                padding: 20px;
+            }}
+            table {{
+                width: 100%;
+                margin-top: 20px;
+                border-collapse: collapse;
+                background-color: rgba(255, 255, 255, 0.9);
+                border: none;
+                text-align: left;
+                color: black;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }}
+            th, td {{
+                padding: 8px;
+                border: 1px solid black; /* Adds grid lines */
+                font-size: 20px;
+                line-height: 1.1;
+            }}
+            th {{
+                background-color: rgba(255, 255, 255, 0.7);
+                font-weight: bold;
+            }}
+            td img {{
+                vertical-align: middle;
+                width: 40px;
+                margin-right: 8px;
+            }}
+            .outcome-w {{
+                color: green;
+                font-weight: bold;
+            }}
+            .outcome-l {{
+                color: red;
+                font-weight: bold;
+            }}
         </style>
     </head>
     <body>
-    <h1>Nebraska Football Schedule 2024</h1>
-    <table>
-        <tr>
-            <th>Date</th>
-            <th>Opponent</th>
-            <th>Opponent Logo</th>
-            <th>Location</th>
-            <th>Ranking</th>
-            <th>Result</th>
-            <th>TV Network</th>
-        </tr>
+        <div class="left-section">
+            <img src="Nebraska_Cornhuskers_logo.png" alt="Nebraska Logo">
+            <div class="upcoming-game">
+                <h2>Upcoming Game:</h2>
+                <div class="game-info">
+                    <img src="{upcoming_opponent_logo_url}" alt="{upcoming_opponent} Logo">
+                    <h1>{upcoming_opponent}</h1><br>
+                    <table>
+                    <tr>
+                        <td>Date: {upcoming_date}</td>
+                        <td rowspan="3">{f'<img src="{upcoming_tv_logo_url}" alt="TV Network Logo">' if upcoming_tv_logo_url else ''}</td>
+                    </tr>
+                    <tr>
+                        <td>Time: {upcoming_time}</td>
+                    </tr>
+                    <tr>
+                        <td>Location: {upcoming_location}</td>
+                    </tr>
+                      <tr>
+                        <td colspan="2"style="height: 10px;"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">Spread: (NEB) {nebraska_spread if nebraska_spread else 'N/A'}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">{bet_description if bet_description else 'N/A'}</td>
+                    </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="right-section">
+            <table>
+                <tr>
+                    <th>Date</th>
+                    <th>Opponent</th>
+                    <th>Location</th>
+                    <th>Result</th>
+                </tr>
     '''
-    
+
     for event in schedule_data:
-        opponent = event['opponent_name']
+        # Extracting data
+        opponent = event['opponent_name']  # Using opponent_name field now
         date = format_date(event['datetime'], opponent_name=opponent)
         opponent_logo_url = event['opponent']['official_logo']['url'] if 'official_logo' in event['opponent'] else ''
         location = event['location']
+        ranking = format_ranking(event.get('opponent_ranking', ''), opponent, ncaa_rankings)  # Correct ranking logic
         result = format_result(event)
-
-        # Check if opponent is ranked from the NCAA rankings or the event API
-        if result == "TBA" and opponent in rankings:
-            ranking = rankings[opponent]
-        else:
-            ranking = f"#{event['opponent_ranking']}" if event.get('opponent_ranking') else ""
-
-        # Extracting TV network logo URL, leave blank if no TV logo
-        tv_network_logo = ''
-        if event['schedule_event_links']:
-            for link in event['schedule_event_links']:
-                if link['icon'] and 'url' in link['icon']:
-                    tv_network_logo = link['icon']['url']
-                    break
-
+        result_class = "outcome-w" if result.startswith("W") else "outcome-l" if result.startswith("L") else ""
+        
+        # Building HTML row
         html_content += f'''
         <tr>
             <td>{date}</td>
-            <td>{opponent}</td>
-            <td><img src="{opponent_logo_url}" class="logo" alt="{opponent} logo"></td>
+            <td class="left-align"><img src="{opponent_logo_url}" class="logo" alt="{opponent} logo"> {opponent} {ranking}</td>
             <td>{location}</td>
-            <td>{ranking}</td>
-            <td>{result}</td>
-            <td>{f'<img src="{tv_network_logo}" class="tv-logo" alt="TV Network Logo">' if tv_network_logo else ''}</td>
+            <td class="{result_class}">{result}</td>
         </tr>
         '''
-    
+
+    # Closing HTML
     html_content += '''
     </table>
+    </div>
     </body>
     </html>
     '''
-    
+
+    # Writing to index.html
     with open("index.html", "w") as file:
         file.write(html_content)
-    
-    print("Schedule HTML generated!")
 
+# Main code execution
 if __name__ == "__main__":
-    all_data = fetch_schedule()
-    filtered_data = filter_2024_schedule(all_data)
-    rankings = get_football_rankings()
-    generate_html(filtered_data, rankings)
+    all_data = fetch_schedule()  # Fetch schedule data
+    filtered_data = filter_2024_schedule(all_data)  # Filter for 2024 season
+    ncaa_rankings = scrape_ncaa_rankings()  # Scrape the rankings from the NCAA site
+    generate_html(filtered_data, ncaa_rankings)
