@@ -4,7 +4,7 @@ on:
   schedule:
     # Run every hour between 8 AM and 5 PM Central Time (14:00-23:00 UTC)
     - cron: '0 14-23 * * *'
-  
+
   workflow_dispatch:  # This enables manual runs
 
 jobs:
@@ -14,18 +14,18 @@ jobs:
     steps:
     # Step 1: Checkout the latest code from the repository
     - name: Checkout repository
-      uses: actions/checkout@v3  # Updated to v3
+      uses: actions/checkout@v3
 
     # Step 2: Set up Python environment
     - name: Set up Python 3.x
-      uses: actions/setup-python@v4  # Updated to v4
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
 
-    # Step 3: Install required dependencies (if you have any requirements in requirements.txt)
+    # Step 3: Install required dependencies directly
     - name: Install dependencies
       run: |
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install requests beautifulsoup4 pytz
 
     # Step 4: Run the Python script (this will update index.html)
     - name: Run Nebraska schedule script
