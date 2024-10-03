@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install beautifulsoup4 requests
+          pip install beautifulsoup4 requests pytz  # Added pytz to the dependencies
 
       - name: Run the Python script
         run: python nebraska_schedule.py
@@ -41,6 +41,6 @@ jobs:
       # Push changes using the personal access token (PAT)
       - name: Push changes
         env:
-          GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}  # Make sure you create this secret in your repo
+          GITHUB_TOKEN: ${{ secrets.ACTION_PAT }}  # Updated to use ACTION_PAT
         run: |
-          git push https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git
+          git push https://x-access-token:${{ secrets.ACTION_PAT }}@github.com/${{ github.repository }}.git
