@@ -4,6 +4,8 @@ on:
   schedule:
     # Run every hour between 8 AM and 5 PM Central Time (14:00-23:00 UTC)
     - cron: '0 14-23 * * *'
+  
+  workflow_dispatch:  # This enables manual runs
 
 jobs:
   update_schedule:
