@@ -1,41 +1,46 @@
-name: Nebraska Schedule Update
+name: Update Nebraska Football Schedule
 
 on:
   schedule:
-    # Run every hour between 8 AM and 5 PM Central Time (14:00-23:00 UTC)
-    - cron: '0 14-23 * * *'
-  
-  workflow_dispatch:  # This enables manual runs
+    - cron: '0 8-17 * * *'  # Runs every hour from 8 AM to 5 PM CST
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
-  update_schedule:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout the latest code from the repository
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    # Step 2: Set up Python environment
-    - name: Set up Python 3.x
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'  # Ensure correct Python version
 
-    # Step 3: Install required dependencies
-    - name: Install dependencies
-      run: |
-        pip install requests beautifulsoup4 pytz
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install beautifulsoup4 requests
 
-    # Step 4: Run the Python script (this will update index.html)
-    - name: Run Nebraska schedule script
-      run: python nebraska_schedule.py
+      - name: Run the Python script
+        run: python nebraska_schedule.py
 
-    # Step 5: Commit and push the updated index.html file back to the repository
-    - name: Commit and push changes
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "GitHub Actions Bot"
-        git add index.html
-        git commit -m "Updated index.html with latest Nebraska schedule"
-        git push https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/hyst16/nebraska-football-schedule.git
+      # Ensure file timestamp is updated
+      - name: Touch the index.html to update the timestamp
+        run: touch index.html
+
+      # Commit the updated HTML file
+      - name: Commit the updated HTML file
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add index.html
+          git commit -m "Auto-update index.html via GitHub Actions" || echo "No changes to commit"
+
+      # Push changes using the personal access token (PAT)
+      - name: Push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_TOKEN }}  # Make sure you create this secret in your repo
+        run: |
+          git push https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/${{ github.repository }}.git
