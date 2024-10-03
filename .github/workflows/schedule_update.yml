@@ -4,7 +4,7 @@ on:
   schedule:
     # Run every hour between 8 AM and 5 PM Central Time (14:00-23:00 UTC)
     - cron: '0 14-23 * * *'
-
+  
   workflow_dispatch:  # This enables manual runs
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       with:
         python-version: '3.x'
 
-    # Step 3: Install required dependencies directly
+    # Step 3: Install required dependencies
     - name: Install dependencies
       run: |
         pip install requests beautifulsoup4 pytz
@@ -38,4 +38,4 @@ jobs:
         git config --local user.name "GitHub Actions Bot"
         git add index.html
         git commit -m "Updated index.html with latest Nebraska schedule"
-        git push
+        git push https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/hyst16/nebraska-football-schedule.git
