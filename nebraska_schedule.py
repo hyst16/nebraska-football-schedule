@@ -1,21 +1,19 @@
+import base64
+from io import BytesIO
+from PIL import Image
 import requests
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 import pytz
-import base64
-from io import BytesIO
 
-# Helper function to convert image URLs to base64
+# Convert image URL to base64
 def image_to_base64(image_url):
-    try:
-        response = requests.get(image_url)
-        img = BytesIO(response.content)
-        base64_image = base64.b64encode(img.read()).decode('utf-8')
-        return f"data:image/png;base64,{base64_image}"
-    except Exception as e:
-        print(f"Error loading image from {image_url}: {e}")
-        return None
+    response = requests.get(image_url)
+    image = Image.open(BytesIO(response.content))
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")  # Save as PNG (or other format as needed)
+    return f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode()}"
 
 # Function to scrape NCAA football rankings from the official site
 def scrape_ncaa_rankings():
@@ -192,7 +190,6 @@ def get_nebraska_odds(upcoming_game_date):
 
     return None, None
 
-
 # Generate HTML schedule from filtered data
 def generate_html(schedule_data, ncaa_rankings):
     upcoming_game = get_upcoming_game(schedule_data)  # Get the next game based on today's date
@@ -204,7 +201,7 @@ def generate_html(schedule_data, ncaa_rankings):
     upcoming_time = format_time_to_cst(upcoming_game['datetime'])
     upcoming_date = format_date(upcoming_game['datetime'], opponent_name=upcoming_opponent)
     upcoming_tv_logo_url = ""
-    
+
     if upcoming_game['schedule_event_links']:
         for link in upcoming_game['schedule_event_links']:
             if link['icon'] and 'url' in link['icon']:
@@ -331,7 +328,7 @@ def generate_html(schedule_data, ncaa_rankings):
                         <td>Location: {upcoming_location}</td>
                     </tr>
                       <tr>
-                        <td colspan="2"style="height: 10px;"></td>
+                        <td colspan="2" style="height: 10px;"></td>
                     </tr>
                     <tr>
                         <td colspan="2">Spread: (NEB) {nebraska_spread if nebraska_spread else 'N/A'}</td>
@@ -355,14 +352,14 @@ def generate_html(schedule_data, ncaa_rankings):
 
     for event in schedule_data:
         # Extracting data
-        opponent = event['opponent_name']  # Using opponent_name field now
+        opponent = event['opponent_name']
         date = format_date(event['datetime'], opponent_name=opponent)
         opponent_logo_url = image_to_base64(event['opponent']['official_logo']['url']) if 'official_logo' in event['opponent'] else ''
         location = event['location']
-        ranking = format_ranking(event.get('opponent_ranking', ''), opponent, ncaa_rankings)  # Correct ranking logic
+        ranking = format_ranking(event.get('opponent_ranking', ''), opponent, ncaa_rankings)
         result = format_result(event)
         result_class = "outcome-w" if result.startswith("W") else "outcome-l" if result.startswith("L") else ""
-        
+
         # Building HTML row
         html_content += f'''
         <tr>
